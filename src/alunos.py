@@ -89,7 +89,7 @@ def gerar_matricula(df):
 
 def inserir_aluno_dict(df, aluno_dict):
     """
-    Insere aluno com matrícula manual (se enviada) ou automática.
+    Inserir aluno com matrícula manual (se enviada) ou automática.
     """
     if df is None:
         df = criar_dataframe_base()
