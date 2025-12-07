@@ -53,7 +53,7 @@ def criar_dataframe_base():
 
 def salvar_dataframe(df):
     """
-    Salva o dataframe em CSV.
+    Salvar o dataframe em CSV.
     """
     df_to_save = df.copy()
     for col in COLUMNS:
