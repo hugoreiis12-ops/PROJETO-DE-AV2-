@@ -121,7 +121,7 @@ def inserir_aluno_dict(df, aluno_dict):
 
 def pesquisar(df, termo):
     """
-    Pesquisa por matrícula ou nome (case-insensitive, sem acentos).
+    Pesquisar por matrícula ou nome (case-insensitive, sem acentos).
     """
     if df is None:
         return pd.DataFrame(columns=COLUMNS)
