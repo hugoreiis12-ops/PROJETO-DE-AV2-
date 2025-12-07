@@ -39,6 +39,28 @@ def mostrar_aluno(linha):
 
 def inserir_fluxo(df):
     print("\n=== Inserir novo aluno ===")
+
+    # --- NOVA PARTE: Perguntar matrícula manual ---
+    matricula_input = input_com_prompt("Matrícula (deixe vazio para gerar automaticamente): ").strip()
+
+    if matricula_input != "":
+        if not matricula_input.isdigit():
+            print("Matrícula inválida (precisa ser apenas números).")
+            return df
+        
+        # verifica duplicação
+        existente = df[df["Matrícula"].astype(str) == matricula_input]
+        if not existente.empty:
+            print("Erro: Já existe um aluno com essa matrícula.")
+            return df
+
+        matricula_final = matricula_input
+    else:
+        matricula_final = gerar_matricula(df)
+
+    # ----------------------------------------------
+
+    print("\n=== Inserir novo aluno ===")
     aluno = {}
     aluno["Nome"] = input_com_prompt("Nome: ").strip()
     aluno["Rua"] = input_com_prompt("Rua: ").strip()
@@ -49,7 +71,7 @@ def inserir_fluxo(df):
     aluno["Telefone"] = input_com_prompt("Telefone: ").strip()
     aluno["Email"] = input_com_prompt("Email: ").strip()
     df = inserir_aluno_dict(df, aluno)
-    print(f"Aluno inserido com matrícula {gerar_matricula(df) - 1}")
+    print(f"Aluno inserido com matrícula {matricula_final}")
     return df
 
 
@@ -81,7 +103,7 @@ def pesquisar_fluxo(df):
         if res_edit.empty:
             print("Matrícula não encontrada.")
             return df
-        # mostrar dados atuais
+        # mostra dados atuais
         print("\nDados atuais:")
         mostrar_aluno(res_edit.iloc[0])
         # Perguntar qual campo editar
