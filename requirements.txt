@@ -1,1 +1,2 @@
+# Dependencias do projeto 
 pandas
