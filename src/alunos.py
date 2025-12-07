@@ -65,7 +65,7 @@ def salvar_dataframe(df):
 
 def gerar_matricula(df):
     """
-    Gera próxima matrícula sequencial começando em 1001.
+    Gerar próxima matrícula sequencial começando em 1001.
     """
     if df is None or df.empty:
         return 1001
