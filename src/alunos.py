@@ -33,7 +33,7 @@ def normalizar(texto):
 
 def criar_dataframe_base():
     """
-    Lê o CSV se existir e retorna DataFrame com colunas corretas.
+    Ler o CSV se existir e retorna DataFrame com colunas corretas.
     Caso não exista, retorna df vazio com colunas definidas.
     """
     if os.path.exists(CSV_PATH):
