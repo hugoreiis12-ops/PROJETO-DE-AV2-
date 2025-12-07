@@ -1,8 +1,8 @@
-# src/alunos.py
 import os
 import pandas as pd
+import unicodedata
 
-# Caminho do arquivo CSV
+# Caminho de arquivo CSV (mesma pasta do módulo)
 BASE_DIR = os.path.dirname(__file__)
 CSV_PATH = os.path.join(BASE_DIR, "alunos.csv")
 
@@ -19,119 +19,109 @@ COLUMNS = [
 ]
 
 
+def normalizar(texto):
+    """
+    Remove acentos e coloca tudo em minúsculo para permitir busca inteligente.
+    """
+    if texto is None:
+        return ""
+    texto = str(texto)
+    texto = unicodedata.normalize("NFD", texto)
+    texto = texto.encode("ascii", "ignore").decode("utf-8")
+    return texto.lower()
+
+
 def criar_dataframe_base():
     """
-    Lê o CSV se existir e retorna DataFrame correto.
-    Caso não exista, retorna DataFrame vazio com colunas definidas.
+    Lê o CSV se existir e retorna DataFrame com colunas corretas.
+    Caso não exista, retorna df vazio com colunas definidas.
     """
     if os.path.exists(CSV_PATH):
         try:
             df = pd.read_csv(CSV_PATH, dtype=str)
-
             for col in COLUMNS:
                 if col not in df.columns:
                     df[col] = ""
-
             df["Matrícula"] = df["Matrícula"].astype(str)
             df = df[COLUMNS]
             return df.reset_index(drop=True)
-
         except Exception:
             return pd.DataFrame(columns=COLUMNS)
+    else:
+        return pd.DataFrame(columns=COLUMNS)
 
-    return pd.DataFrame(columns=COLUMNS)
 
-
-def carregar_dados():
+def salvar_dataframe(df):
     """
-    Apenas retorna o dataframe base.
+    Salva o dataframe em CSV.
     """
-    return criar_dataframe_base()
-
-
-def salvar_dados(df):
-    """
-    Salva dataframe no CSV com colunas em ordem.
-    """
-    df2 = df.copy()
-
+    df_to_save = df.copy()
     for col in COLUMNS:
-        if col not in df2.columns:
-            df2[col] = ""
-
-    df2 = df2[COLUMNS]
-    df2.to_csv(CSV_PATH, index=False)
+        if col not in df_to_save.columns:
+            df_to_save[col] = ""
+    df_to_save = df_to_save[COLUMNS]
+    df_to_save.to_csv(CSV_PATH, index=False)
 
 
 def gerar_matricula(df):
     """
-    Gera a próxima matrícula sequencial começando em 1001.
+    Gera próxima matrícula sequencial começando em 1001.
     """
     if df is None or df.empty:
         return 1001
 
     try:
-        values = df["Matrícula"].dropna().astype(str)
+        mats = df["Matrícula"].dropna().astype(str)
         nums = []
 
-        for m in values:
-            if m.strip().isdigit():
-                nums.append(int(m))
+        for m in mats:
+            m_strip = m.strip()
+            if m_strip.isdigit():
+                nums.append(int(m_strip))
 
         if not nums:
             return 1001
 
         return max(nums) + 1
-
     except Exception:
         return 1001
 
 
 def inserir_aluno_dict(df, aluno_dict):
     """
-    Insere um novo aluno (dict) no dataframe e salva.
+    Insere aluno com matrícula manual (se enviada) ou automática.
     """
     if df is None:
         df = criar_dataframe_base()
 
     df = df.copy()
-    matricula = gerar_matricula(df)
+
+    # matrícula manual
+    if "Matrícula" in aluno_dict and aluno_dict["Matrícula"].strip() != "":
+        matricula = aluno_dict["Matrícula"].strip()
+
+        # checar duplicação
+        existente = df[df["Matrícula"].astype(str) == matricula]
+        if not existente.empty:
+            raise ValueError(f"Já existe um aluno com a matrícula {matricula}.")
+    else:
+        matricula = str(gerar_matricula(df))
 
     novo = {col: "" for col in COLUMNS}
-    novo["Matrícula"] = str(matricula)
+    novo["Matrícula"] = matricula
 
     for k, v in aluno_dict.items():
         if k in novo:
             novo[k] = str(v).strip()
-        else:
-            kk = k.lower()
-            if kk in ("numero", "número"):
-                novo["Número"] = v
-            elif kk == "bairro":
-                novo["Bairro"] = v
-            elif kk == "cidade":
-                novo["Cidade"] = v
-            elif kk == "uf":
-                novo["UF"] = v
-            elif kk in ("telefone", "tel"):
-                novo["Telefone"] = v
-            elif kk in ("email", "e-mail"):
-                novo["Email"] = v
-            elif kk == "nome":
-                novo["Nome"] = v
-            elif kk == "rua":
-                novo["Rua"] = v
 
-    # append substituído por concat (append foi removido do pandas)
-    df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
-
-    salvar_dados(df)
+    df = df.append(novo, ignore_index=True)
+    salvar_dataframe(df)
     return df
 
 
 def pesquisar(df, termo):
     """
-    Pesquisa aluno por matrícula ou nome (case-insensitive).
+    Pesquisa por matrícula ou nome (case-insensitive, sem acentos).
     """
     if df is None:
         return pd.DataFrame(columns=COLUMNS)
@@ -142,71 +132,78 @@ def pesquisar(df, termo):
     if termo == "":
         return pd.DataFrame(columns=COLUMNS)
 
+    # Caso matrícula (somente números)
     if termo.isdigit():
-        result = df[df["Matrícula"].astype(str) == termo]
-        return result.reset_index(drop=True)
+        res = df[df["Matrícula"].astype(str) == termo]
+        return res.reset_index(drop=True)
 
-    mask = df["Nome"].astype(str).str.lower().str.contains(termo.lower())
-    return df[mask].reset_index(drop=True)
+    # Caso nome → normalizar
+    termo_norm = normalizar(termo)
+
+    df["Nome_norm"] = df["Nome"].apply(normalizar)
+
+    mask = df["Nome_norm"].str.contains(termo_norm, na=False)
+    resultados = df[mask].drop(columns=["Nome_norm"])
+
+    return resultados.reset_index(drop=True)
 
 
-def editar_aluno(df, matricula, dados):
+def editar_aluno(df, matricula, dados_atualizados: dict):
     """
-    Edita um aluno existente.
+    Edita aluno pela matrícula.
     """
     if df is None:
         return pd.DataFrame(columns=COLUMNS)
 
     df = df.copy()
-    matricula = str(matricula).strip()
+    matricula_str = str(matricula).strip()
 
-    idx = df.index[df["Matrícula"].astype(str) == matricula].tolist()
+    idx = df.index[df["Matrícula"].astype(str) == matricula_str].tolist()
 
     if not idx:
         return df
 
     i = idx[0]
 
-    for k, v in dados.items():
+    for k, v in dados_atualizados.items():
         if k == "Matrícula":
             continue
 
         if k in COLUMNS:
             df.at[i, k] = str(v).strip()
         else:
-            kk = k.lower()
-            if kk in ("numero", "número"):
-                df.at[i, "Número"] = v
-            elif kk == "bairro":
-                df.at[i, "Bairro"] = v
-            elif kk == "cidade":
-                df.at[i, "Cidade"] = v
-            elif kk == "uf":
-                df.at[i, "UF"] = v
-            elif kk in ("telefone", "tel"):
-                df.at[i, "Telefone"] = v
-            elif kk in ("email", "e-mail"):
-                df.at[i, "Email"] = v
-            elif kk == "nome":
-                df.at[i, "Nome"] = v
-            elif kk == "rua":
-                df.at[i, "Rua"] = v
+            # mapeamentos simples
+            if k.lower() in ("numero", "número"):
+                df.at[i, "Número"] = str(v).strip()
+            elif k.lower() == "bairro":
+                df.at[i, "Bairro"] = str(v).strip()
+            elif k.lower() == "cidade":
+                df.at[i, "Cidade"] = str(v).strip()
+            elif k.lower() == "uf":
+                df.at[i, "UF"] = str(v).strip()
+            elif k.lower() in ("telefone", "tel"):
+                df.at[i, "Telefone"] = str(v).strip()
+            elif k.lower() in ("email", "e-mail"):
+                df.at[i, "Email"] = str(v).strip()
+            elif k.lower() == "nome":
+                df.at[i, "Nome"] = str(v).strip()
+            elif k.lower() == "rua":
+                df.at[i, "Rua"] = str(v).strip()
 
-    salvar_dados(df)
+    salvar_dataframe(df)
     return df
 
 
 def remover_aluno(df, matricula):
     """
-    Remove o aluno com a matrícula informada.
+    Remove aluno pela matrícula.
     """
     if df is None:
         return pd.DataFrame(columns=COLUMNS)
 
     df = df.copy()
-    matricula = str(matricula).strip()
+    matricula_str = str(matricula).strip()
 
-    df2 = df[df["Matrícula"].astype(str) != matricula].reset_index(drop=True)
-
-    salvar_dados(df2)
-    return df2
+    df_new = df[df["Matrícula"].astype(str) != matricula_str].reset_index(drop=True)
+    salvar_dataframe(df_new)
+    return df_new
