@@ -1,7 +1,9 @@
+
 # Sistema de Cadastramento interno de Alunos - AV2 PCA
 
 ## Autores
-- Seu Nome
+- Hugo dos Reis Correa Lima - Matrícula: 06015459
+- Vitor Alexandre Rocha de Souza - Matrícula: 06014670
 
 ## Descrição
 Programa para cadastrar, pesquisar, editar e remover alunos. Os dados são salvos em `src/alunos.csv` (criado automaticamente).
