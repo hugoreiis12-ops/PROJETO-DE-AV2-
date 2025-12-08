@@ -1,174 +1,187 @@
-# main.py
-import os
-import sys
-
-# garantir que o src esteja no path se rodar a partir da raiz 
-THIS_DIR = os.path.dirname(__file__)
-SRC_DIR = os.path.join(THIS_DIR, "src")
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
-
-from src.alunos import ( criar_dataframe_base,
-    gerar_matricula,
-    inserir_aluno_dict,
-    pesquisar,
-    editar_aluno,
-    remover_aluno,
+from src.repositorios.alunos_repositories import carregar_alunos, salvar_dados
+from src.services.alunos_services import (
+    inserir,
+    pesquisar_por_termo,
+    campos_editaveis,
+    editar_campo,
+    remover_por_matricula,
+    formatar_aluno,
 )
+from enum import Enum
 
-def limpar_tela():
-    os.system("cls" if os.name == "nt" else "clear")
+class OpcaoMenu(Enum):
+    INSERIR = "1"
+    PESQUISAR = "2"
+    SAIR = "3"
 
+def solicitar_entrada(mensagem):
+    return input(mensagem)
 
-def input_com_prompt(prompt):
+def exibir_menu_principal():
+    print("\n=== TRABALHO PRÁTICO AV2 - MENU ===")
+    print("1 - INSERIR")
+    print("2 - PESQUISAR")
+    print("3 - SAIR")
+    entrada = solicitar_entrada("Escolha uma opção: ").strip()
+    mapa = {
+        "1": OpcaoMenu.INSERIR,
+        "2": OpcaoMenu.PESQUISAR,
+        "3": OpcaoMenu.SAIR,
+    }
+    return mapa.get(entrada)
+
+def processar_insercao(alunos):
+    print("\n== Inserir Aluno ==")
+    dados = {
+        "Nome": solicitar_entrada("Nome: ").strip(),
+        "Rua": solicitar_entrada("Rua: ").strip(),
+        "Número": solicitar_entrada("Número: ").strip(),
+        "Bairro": solicitar_entrada("Bairro: ").strip(),
+        "Cidade": solicitar_entrada("Cidade: ").strip(),
+        "UF": solicitar_entrada("UF (2 letras): ").strip(),
+        "Telefone": solicitar_entrada("Telefone: ").strip(),
+        "Email": solicitar_entrada("Email: ").strip(),
+    }
     try:
-        return input(prompt)
-    except (KeyboardInterrupt, EOFError):
-        return ""
+        alunos, novo = inserir(alunos, dados)
+        salvar_dados(alunos)
+        print(f"Aluno cadastrado com matrícula {novo.matricula}.")
+    except ValueError as e:
+        print(f"Erro: {e}")
+    return alunos
 
+def processar_pesquisa(alunos):
+    print("\n== Pesquisar Aluno ==")
+    
+    if not alunos:
+        print("Nenhum aluno cadastrado.")
+        return None
+    
+    termo = solicitar_entrada("Termo de pesquisa (matrícula ou nome): ").strip()
+    resultados = pesquisar_por_termo(alunos, termo)
+    
+    if not resultados:
+        print("Aluno não encontrado.")
+        return None
+    
+    if len(resultados) == 1:
+        return resultados[0]
+    
+    if len(resultados) > 1:
+        print("Foram encontrados múltiplos alunos:")
+        for a in resultados:
+            print(f"Matrícula {a.matricula} - {a.nome}")
+            
+    sel = solicitar_entrada("Digite a matrícula para selecionar (ou ENTER p/ cancelar): ").strip()
+    
+    if sel == "":
+        print("Operação cancelada.")
+        return None
+    
+    selecionados = [a for a in resultados if a.matricula == sel]
+    
+    if not selecionados:
+        print("Matrícula inválida.")
+        return None
+    
+    return selecionados[0]
 
-def mostrar_aluno(linha):
-    """
-    Linha é uma Series do DataFrame
-    """
-    print("-----")
-    for col in linha.index:
-        print(f"{col}: {linha[col]}")
-    print("-----")
+def processar_edicao(alunos, aluno):
+    for linha in formatar_aluno(aluno):
+        print(linha)
+    
+    acao = exibir_menu_acao()
+    
+    if acao == "1":
+        return editar_dados_aluno(alunos, aluno)
+    elif acao == "2":
+        return remover_aluno(alunos, aluno)
+    elif acao == "3" or acao == "":
+        print("Operação cancelada.")
+        return alunos
+    else:
+        print("Opção inválida.")
+        return alunos
 
+def exibir_menu_acao():
+    print("\nO que deseja fazer?")
+    print("1 - Editar")
+    print("2 - Remover")
+    print("3 - Voltar")
+    
+    return solicitar_entrada("Escolha uma opção: ").strip()
 
-def inserir_fluxo(df):
-    print("\n=== Inserir novo aluno ===")
+def exibir_dados_aluno(aluno):
+    for linha in formatar_aluno(aluno):
+        print(linha)
 
-    # --- NOVA PARTE: Perguntar matrícula manual ---
-    matricula_input = input_com_prompt("Matrícula (deixe vazio para gerar automaticamente): ").strip()
-
-    if matricula_input != "":
-        if not matricula_input.isdigit():
-            print("Matrícula inválida (precisa ser apenas números).")
-            return df
+def editar_dados_aluno(alunos, aluno):
+    opcoes = campos_editaveis()
+    
+    print("\nQual campo deseja editar?")
+    
+    for i, c in enumerate(opcoes, start=1):
+        print(f"{i} - {c}")
         
-        # verifica duplicação
-        existente = df[df["Matrícula"].astype(str) == matricula_input]
-        if not existente.empty:
-            print("Erro: Já existe um aluno com essa matrícula.")
-            return df
+    esc = solicitar_entrada("Informe a opção: ").strip()
+    
+    if not esc.isdigit() or not (1 <= int(esc) <= len(opcoes)):
+        print("Opção inválida.")
+        return alunos
+    
+    campo = opcoes[int(esc) - 1]
+    novo_valor = solicitar_entrada(f"Novo valor para {campo}: ").strip()
+    
+    try:
+        editar_campo(aluno, campo, novo_valor)
+        salvar_dados(alunos)
+        
+        print("Dados do aluno atualizados.")
+        
+        exibir_dados_aluno(aluno)
+    except ValueError as e:
+        print(f"Erro: {e}")
+        
+    return alunos
 
-        matricula_final = matricula_input
+def remover_aluno(alunos, aluno):
+    conf = solicitar_entrada("Confirmar remoção? (S/N): ").strip().upper()
+    
+    if conf == "S":
+        alunos = remover_por_matricula(alunos, aluno.matricula)
+        salvar_dados(alunos)
+        print("Aluno removido.")
     else:
-        matricula_final = gerar_matricula(df)
+        print("Remoção cancelada.")
+    return alunos
 
-    # ----------------------------------------------
+def processar_pesquisa_opcao(alunos):
+    selecionado = processar_pesquisa(alunos)
+    
+    if selecionado:
+        return processar_edicao(alunos, selecionado)
+    
+    return alunos
 
-    print("\n=== Inserir novo aluno ===")
-    aluno = {}
-    aluno["Nome"] = input_com_prompt("Nome: ").strip()
-    aluno["Rua"] = input_com_prompt("Rua: ").strip()
-    aluno["Número"] = input_com_prompt("Número: ").strip()
-    aluno["Bairro"] = input_com_prompt("Bairro: ").strip()
-    aluno["Cidade"] = input_com_prompt("Cidade: ").strip()
-    aluno["UF"] = input_com_prompt("UF: ").strip().upper()
-    aluno["Telefone"] = input_com_prompt("Telefone: ").strip()
-    aluno["Email"] = input_com_prompt("Email: ").strip()
-    df = inserir_aluno_dict(df, aluno)
-    print(f"Aluno inserido com matrícula {matricula_final}")
-    return df
-
-
-def pesquisar_fluxo(df):
-    print("\n=== Pesquisar aluno ===")
-    termo = input_com_prompt("Digite matrícula ou nome: ").strip()
-    if termo == "":
-        print("Pesquisa vazia.")
-        return df
-    res = pesquisar(df, termo)
-    if res.empty:
-        print("Nenhum aluno encontrado.")
-        return df
-    # mostrar resultados
-    print(f"\nForam encontrados {len(res)} resultado(s):")
-    for i in range(len(res)):
-        print(f"\nResultado #{i+1}:")
-        mostrar_aluno(res.iloc[i])
-
-    # se mais de um resultado, pedir qual matrícula operar (opcional)
-    # Perguntar se deseja editar ou remover
-    escolha = input_com_prompt("\nDeseja (E)ditar, (R)emover ou (V)oltar? [E/R/V]: ").strip().lower()
-    if escolha == "e":
-        matricula = input_com_prompt("Digite a matrícula do aluno a editar: ").strip()
-        if matricula == "":
-            print("Matrícula vazia. Abortando edição.")
-            return df
-        res_edit = pesquisar(df, matricula)
-        if res_edit.empty:
-            print("Matrícula não encontrada.")
-            return df
-        # mostra dados atuais
-        print("\nDados atuais:")
-        mostrar_aluno(res_edit.iloc[0])
-        # Perguntar qual campo editar
-        campos = [c for c in res_edit.columns if c != "Matrícula"]
-        print("\nCampos editáveis:")
-        for idx, c in enumerate(campos, start=1):
-            print(f"{idx} - {c}")
-        try:
-            opt = int(input_com_prompt("Escolha o número do campo a editar: ").strip())
-            if opt < 1 or opt > len(campos):
-                print("Opção inválida. Abortando edição.")
-                return df
-            campo_escolhido = campos[opt - 1]
-            novo_valor = input_com_prompt(f"Novo valor para {campo_escolhido}: ").strip()
-            if novo_valor == "":
-                print("Valor vazio. Abortando edição.")
-                return df
-            df = editar_aluno(df, matricula, {campo_escolhido: novo_valor})
-            print("Aluno atualizado com sucesso.")
-        except ValueError:
-            print("Entrada inválida. Abortando edição.")
-        return df
-
-    elif escolha == "r":
-        matricula = input_com_prompt("Digite a matrícula do aluno a remover: ").strip()
-        if matricula == "":
-            print("Matrícula vazia. Abortando remoção.")
-            return df
-        res_rem = pesquisar(df, matricula)
-        if res_rem.empty:
-            print("Matrícula não encontrada.")
-            return df
-        # confirmação
-        print("\nRegistro encontrado:")
-        mostrar_aluno(res_rem.iloc[0])
-        conf = input_com_prompt("Deseja realmente remover este aluno? (s/N): ").strip().lower()
-        if conf == "s":
-            df = remover_aluno(df, matricula)
-            print("Aluno removido.")
-        else:
-            print("Remoção cancelada.")
-        return df
-
-    else:
-        return df
-
+def processar_saida():
+    print("Saindo... Até mais.")
 
 def main():
-    df = criar_dataframe_base()
+    alunos = carregar_alunos()
+    
     while True:
-        print("\n=== TRABALHO PRÁTICO AV2 - MENU ===")
-        print("1 - INSERIR")
-        print("2 - PESQUISAR")
-        print("3 - SAIR")
-        escolha = input_com_prompt("Escolha uma opção: ").strip()
-        if escolha == "1":
-            df = inserir_fluxo(df)
-        elif escolha == "2":
-            df = pesquisar_fluxo(df)
-        elif escolha == "3":
-            print("Saindo... Até mais.")
-            break
-        else:
-            print("Opção inválida. Tente novamente.")
-
+        opcao = exibir_menu_principal()
+        
+        match opcao:
+            case OpcaoMenu.INSERIR:
+                alunos = processar_insercao(alunos)
+            case OpcaoMenu.PESQUISAR:
+                alunos = processar_pesquisa_opcao(alunos)
+            case OpcaoMenu.SAIR:
+                processar_saida()
+                break
+            case None:
+                print("Opção inválida.")
 
 if __name__ == "__main__":
     main()
